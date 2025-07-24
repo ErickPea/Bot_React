@@ -1,0 +1,15 @@
+C:\Users\ASUS\eclipse-workspace\botinteractions\src\main\java\botinteractions\Main.java
+C:\Users\ASUS\eclipse-workspace\botinteractions\src\main\java\botinteractions\models\CookieData.java
+C:\Users\ASUS\eclipse-workspace\botinteractions\src\main\java\botinteractions\models\Cuenta.java
+C:\Users\ASUS\eclipse-workspace\botinteractions\src\main\java\botinteractions\models\Profile.java
+C:\Users\ASUS\eclipse-workspace\botinteractions\src\main\java\botinteractions\models\PublicacionCliente.java
+C:\Users\ASUS\eclipse-workspace\botinteractions\src\main\java\botinteractions\models\RegistroAccion.java
+C:\Users\ASUS\eclipse-workspace\botinteractions\src\main\java\botinteractions\orquestador\InteractionManager.java
+C:\Users\ASUS\eclipse-workspace\botinteractions\src\main\java\botinteractions\orquestador\NstBrowserService.java
+C:\Users\ASUS\eclipse-workspace\botinteractions\src\main\java\botinteractions\orquestador\ProfileManager.java
+C:\Users\ASUS\eclipse-workspace\botinteractions\src\main\java\botinteractions\persistence\DatabaseConnection.java
+C:\Users\ASUS\eclipse-workspace\botinteractions\src\main\java\botinteractions\services\CookieManager.java
+C:\Users\ASUS\eclipse-workspace\botinteractions\src\main\java\botinteractions\services\DatabaseService.java
+C:\Users\ASUS\eclipse-workspace\botinteractions\src\main\java\botinteractions\services\FacebookInteractionService.java
+C:\Users\ASUS\eclipse-workspace\botinteractions\src\main\java\botinteractions\services\LoggerService.java
+C:\Users\ASUS\eclipse-workspace\botinteractions\src\main\java\botinteractions\services\SessionService.java
