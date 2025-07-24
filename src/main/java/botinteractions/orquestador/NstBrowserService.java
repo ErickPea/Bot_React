@@ -25,23 +25,26 @@ public class NstBrowserService {
 
         try (Response response = client.newCall(request).execute()) {
             if (!response.isSuccessful()) {
-                System.out.println("Error al obtener perfiles: " + response);
+                System.out.println("Error al obtener perfiles. Status: " + response.code());
                 return "[]";
             }
             String body = response.body().string();
-            System.out.println("Respuesta cruda de perfiles: " + body);
+            System.out.println("Respuesta de perfiles: " + body);
             return body;
         } catch (Exception e) {
-            e.printStackTrace();
+            System.out.println("Error de conexión con NstBrowser: " + e.getMessage());
             return "[]";
         }
     }
 
     public boolean perfilExiste(String perfilesJson, String profileId) {
         try {
+            if (perfilesJson == null || perfilesJson.isEmpty() || "[]".equals(perfilesJson)) {
+                return false;
+            }
+            
             JSONObject jsonObject = new JSONObject(perfilesJson);
-            JSONObject data = jsonObject.getJSONObject("data");
-            JSONArray docs = data.getJSONArray("docs");
+            JSONArray docs = jsonObject.getJSONArray("data");
 
             for (int i = 0; i < docs.length(); i++) {
                 JSONObject perfil = docs.getJSONObject(i);
@@ -49,11 +52,11 @@ public class NstBrowserService {
                     return true;
                 }
             }
+            return false;
         } catch (Exception e) {
-            System.out.println("Error al procesar perfiles JSON: " + perfilesJson);
-            e.printStackTrace();
+            System.out.println("Error al procesar perfiles JSON: " + e.getMessage());
+            return false;
         }
-        return false;
     }
 
     public String obtenerWsEndpoint(String profileId) {
@@ -110,6 +113,7 @@ public class NstBrowserService {
     }
 
     public void ejecutarConPerfil(String profileId) {
+        System.out.println("Verificando perfil con ID: " + profileId);
         String perfilesJson = obtenerPerfiles();
 
         if (!perfilExiste(perfilesJson, profileId)) {

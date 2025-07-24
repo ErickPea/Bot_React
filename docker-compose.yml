@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  bot:
+    build: .
+    environment:
+      - API_KEY=${API_KEY}
+      - NSTBROWSER_URL=http://localhost:8888
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./profiles:/app/profiles
