@@ -47,18 +47,20 @@ public class FacebookInteractionService {
         page.navigate(FACEBOOK_URL);
         page.waitForLoadState(LoadState.NETWORKIDLE); // Espera a que la red esté inactiva
 
-        // Verifica si la página actual es la de login o checkpoint.
-        // Si la URL actual ya contiene "facebook.com/login" o "facebook.com/checkpoint",
-        // significa que ya estamos en una página de inicio de sesión o validación.
-        // No es necesario navegar de nuevo a FACEBOOK_URL + "/login".
-        if (page.url().contains("facebook.com/login") || page.url().contains("facebook.com/checkpoint")) {
-            System.out.println("⚠️ Sesión no activa o requiere validación para: " + email + ". Procediendo con inicio de sesión con credenciales.");
-            // No se navega de nuevo aquí, ya estamos en la página de login/checkpoint.
-            iniciarSesionConCredenciales(page, email, contrasena);
-        } else {
+        // Verificar si la URL actual NO es la página de login o checkpoint.
+        // Si no es ninguna de esas, asumimos que la sesión está activa.
+        if (!page.url().contains("facebook.com/login") && !page.url().contains("facebook.com/checkpoint")) {
             System.out.println("✅ Sesión activa con perfil persistente para: " + email);
             // Si la sesión ya está activa, no se hace nada más aquí, se continúa con las interacciones.
+            return; // Salir del método ya que no se necesita iniciar sesión
         }
+
+        // Si llegamos aquí, la sesión no está activa o requiere validación.
+        System.out.println("⚠️ Sesión no activa o requiere validación para: " + email + ". Redirigiendo e iniciando sesión con credenciales.");
+        // Navegar directamente a la página de login si no estamos logueados
+        page.navigate(FACEBOOK_URL + "/login");
+        page.waitForLoadState(LoadState.NETWORKIDLE); // Espera a que la página de login cargue
+        iniciarSesionConCredenciales(page, email, contrasena);
     }
 
 
@@ -70,6 +72,9 @@ public class FacebookInteractionService {
         Random random = new Random();
         // Aumentar el tiempo de espera inicial
         page.waitForTimeout(2000 + random.nextInt(2000)); // De 2-4 segundos
+
+        // **NUEVO: Esperar explícitamente por el campo de email antes de hacer clic**
+        page.waitForSelector("input[placeholder='Correo electrónico o número de teléfono']", new Page.WaitForSelectorOptions().setTimeout(30000)); // Espera hasta 30 segundos
 
         // Localizar el campo de email usando el atributo placeholder
         page.click("input[placeholder='Correo electrónico o número de teléfono']");
@@ -89,24 +94,25 @@ public class FacebookInteractionService {
 
         boolean loggedIn = false;
         try {
-            // Intento rápido de verificar si ya se inició sesión
+            // Intento de verificar si ya se inició sesión buscando la barra de búsqueda
             page.waitForSelector("input[placeholder='Buscar en Facebook']",
-                new Page.WaitForSelectorOptions().setTimeout(15000)); // 15 segundos
-            loggedIn = true;
+                new Page.WaitForSelectorOptions().setTimeout(30000)); // Darle 30 segundos para cargar
+            loggedIn = true; // Si se encuentra, el login fue exitoso
         } catch (PlaywrightException e) {
-            System.out.println("No se detectó el inicio de sesión directo, verificando anti-bot...");
-            // Si el login directo falla, verificar si es un desafío anti-bot
+            // Si la barra de búsqueda no se encuentra, entonces verificamos el anti-bot
+            System.out.println("Barra de búsqueda no encontrada después del intento de login. Verificando desafío anti-bot...");
             try {
                 // Espera corta para el texto anti-bot
-                page.waitForSelector(ANTI_BOT_TEXT_SELECTOR, new Page.WaitForSelectorOptions().setTimeout(5000));
+                page.waitForSelector(ANTI_BOT_TEXT_SELECTOR, new Page.WaitForSelectorOptions().setState(WaitForSelectorState.VISIBLE).setTimeout(5000));
                 manejarAntiBotChallenge(page); // Llama a la función para manejar el desafío
 
                 // Después de intentar manejar el desafío, intentar verificar el inicio de sesión nuevamente
                 page.waitForSelector("input[placeholder='Buscar en Facebook']",
                     new Page.WaitForSelectorOptions().setTimeout(30000)); // 30 segundos para confirmar login después del desafío
-                loggedIn = true;
+                loggedIn = true; // Login confirmado después de anti-bot
             } catch (PlaywrightException antiBotException) {
-                System.out.println("⚠️ No se detectó desafío anti-bot o el inicio de sesión falló después del desafío: " + antiBotException.getMessage());
+                System.out.println("⚠️ Desafío anti-bot no detectado o el inicio de sesión falló después de intentar manejar el desafío: " + antiBotException.getMessage());
+                // Si el anti-bot no estaba o falló, loggedIn permanece false.
             }
         }
 
@@ -121,16 +127,20 @@ public class FacebookInteractionService {
     }
 
     private void escribirHumanizado(Page page, String texto, int minDelay, int maxDelay) {
-        Random random = new Random();
-        for (char c : texto.toCharArray()) {
-            page.keyboard().press(String.valueOf(c));
-            page.waitForTimeout(minDelay + random.nextInt(maxDelay - minDelay));
-        }
+    Random random = new Random();
+    for (char c : texto.toCharArray()) {
+        page.keyboard().type(String.valueOf(c));
+        page.waitForTimeout(minDelay + random.nextInt(maxDelay - minDelay));
     }
+}
 
     public void aceptarSolicitudes(Page page) { // Recibe Page directamente
         page.navigate(FACEBOOK_URL + "/friends/requests");
         page.waitForLoadState(LoadState.NETWORKIDLE); // Esperar a que la página cargue completamente
+
+        // Realizar un scroll para cargar posibles solicitudes que no estén visibles al inicio
+        page.evaluate("window.scrollBy(0, document.body.scrollHeight)");
+        page.waitForTimeout(2000); // Pequeña espera después del scroll
 
         try {
             // Aumentar el timeout para el selector de Confirmar/Confirm
@@ -153,90 +163,190 @@ public class FacebookInteractionService {
     }
 
 
-    public void reaccionarComentarCompartir(Page page, String publicacionUrl, String comentario, String tipoReaccion) { // Recibe Page directamente
-        page.navigate(publicacionUrl); // Usar la URL de la publicación
-        page.waitForLoadState(LoadState.NETWORKIDLE); // Esperar a que la página cargue completamente
-        page.waitForTimeout(3000);
+    public void reaccionarComentarCompartir(Page page, String publicacionUrl, String comentario, String tipoReaccion) {
+    page.navigate(publicacionUrl);
+    page.waitForLoadState(LoadState.NETWORKIDLE);
+    page.waitForTimeout(4000); // Espera extra para carga completa
 
-        // Añadir scroll hacia abajo para asegurar que los elementos sean visibles
-        page.evaluate("window.scrollBy(0, 500)");
-        page.waitForTimeout(1000);
+    page.evaluate("window.scrollBy(0, 1000)");
+    page.waitForTimeout(2000); // Espera extra para que cargue el área de comentarios
 
-        reaccionarAPublicacion(page, tipoReaccion);
+    reaccionarAPublicacion(page, tipoReaccion);
 
-        // Primero, haz clic en el botón de "Comment"
-        Locator commentButton = page.locator("text=Comment");
-        commentButton.waitFor(new Locator.WaitForOptions().setState(WaitForSelectorState.VISIBLE).setTimeout(30000)); // Aumentar timeout
-        commentButton.click();
-        page.waitForTimeout(1000);
+    // Selector robusto para el botón "Comentar"/"Comment"
+    Locator commentButton = null;
+if (page.locator("div[aria-label='Comentar']").count() > 0) {
+    commentButton = page.locator("div[aria-label='Comentar']").first();
+} else if (page.locator("div[aria-label='Comment']").count() > 0) {
+    commentButton = page.locator("div[aria-label='Comment']").first();
+} else if (page.locator("span:has-text('Comentar')").count() > 0) {
+    commentButton = page.locator("span:has-text('Comentar')").first();
+} else if (page.locator("span:has-text('Comment')").count() > 0) {
+    commentButton = page.locator("span:has-text('Comment')").first();
+}
 
-        // Ahora, asegúrate de que el campo de comentario esté visible y sea interactuable
-        Locator commentBox = page.locator("div[aria-label='Escribe un comentario...']");
-        commentBox.waitFor(new Locator.WaitForOptions().setState(WaitForSelectorState.VISIBLE).setTimeout(30000)); // Aumentar timeout
+if (commentButton != null) {
+    try {
+        commentButton.waitFor(new Locator.WaitForOptions().setState(WaitForSelectorState.VISIBLE).setTimeout(40000));
+        commentButton.click(new Locator.ClickOptions().setForce(true));
+        System.out.println("✅ Botón de comentar presionado.");
+        page.waitForTimeout(1500); // Espera tras abrir el modal
+
+        // NO hagas scroll aquí
+
+        // Selector específico para el campo de comentario dentro del modal
+        Locator commentBox = page.locator("div[contenteditable='true'][role='textbox'][aria-label^='Write a comment']").first();
+        commentBox.waitFor(new Locator.WaitForOptions().setState(WaitForSelectorState.VISIBLE).setTimeout(10000));
+
+        if (commentBox.isVisible()) {
+            commentBox.click();
+            page.waitForTimeout(500); // Espera para asegurar el foco
+            System.out.println("Intentando escribir el comentario: " + comentario);
+            page.keyboard().type(comentario, new Keyboard.TypeOptions().setDelay(100));
+            page.keyboard().press("Enter");
+            System.out.println("✅ Comentario realizado.");
+            page.waitForTimeout(2000); // Espera para asegurar que el comentario se publique
+        } else {
+            System.out.println("⚠️ El campo de comentario no está visible en el modal.");
+            // Buscar y cerrar el modal
+            Locator closeModalBtn = page.locator("div[aria-label='Close'][role='button']").first();
+            if (closeModalBtn.isVisible()) {
+                closeModalBtn.click();
+                System.out.println("✅ Modal de comentario cerrado.");
+                page.waitForTimeout(1000);
+            } else {
+                System.out.println("⚠️ No se encontró el botón para cerrar el modal.");
+            }
+        }
+    } catch (PlaywrightException e) {
+        System.out.println("⚠️ No se pudo comentar: " + e.getMessage());
+        // Intentar cerrar el modal si ocurre un error
+        Locator closeModalBtn = page.locator("div[aria-label='Close'][role='button']").first();
+        if (closeModalBtn.isVisible()) {
+            closeModalBtn.click();
+            System.out.println("✅ Modal de comentario cerrado tras error.");
+            page.waitForTimeout(1000);
+        } else {
+            System.out.println("⚠️ No se encontró el botón para cerrar el modal tras error.");
+        }
+    }
+} else {
+    System.out.println("⚠️ No se encontró ningún botón de comentar.");
+}
+
+// Espera tras abrir el modal de comentarios
+page.waitForTimeout(1500);
+
+// Selector específico para el campo de comentario en el modal
+Locator commentBox = page.locator("div[contenteditable='true'][role='textbox'][aria-label^='Write a comment']").first();
+try {
+    commentBox.waitFor(new Locator.WaitForOptions().setState(WaitForSelectorState.VISIBLE).setTimeout(10000));
+    if (commentBox.isVisible()) {
         commentBox.click();
-        escribirHumanizado(page, comentario, 50, 150);
+        page.waitForTimeout(500); // Espera para asegurar el foco
+        System.out.println("Intentando escribir el comentario: " + comentario);
+        page.keyboard().type(comentario, new Keyboard.TypeOptions().setDelay(100));
         page.keyboard().press("Enter");
+        System.out.println("✅ Comentario realizado.");
+        page.waitForTimeout(2000); // Espera para asegurar que el comentario se publique
+    } else {
+        System.out.println("⚠️ El campo de comentario no está visible en el modal.");
+        // Buscar y cerrar el modal
+        Locator closeModalBtn = page.locator("div[aria-label='Close'][role='button']").first();
+        if (closeModalBtn.isVisible()) {
+            closeModalBtn.click();
+            System.out.println("✅ Modal de comentario cerrado.");
+            page.waitForTimeout(1000);
+        } else {
+            System.out.println("⚠️ No se encontró el botón para cerrar el modal.");
+        }
+    }
+} catch (PlaywrightException e) {
+    System.out.println("⚠️ No se pudo comentar: " + e.getMessage());
+    // Intentar cerrar el modal si ocurre un error
+    Locator closeModalBtn = page.locator("div[aria-label='Close'][role='button']").first();
+    if (closeModalBtn.isVisible()) {
+        closeModalBtn.click();
+        System.out.println("✅ Modal de comentario cerrado tras error.");
+        page.waitForTimeout(1000);
+    } else {
+        System.out.println("⚠️ No se encontró el botón para cerrar el modal tras error.");
+    }
+}
 
-        // Compartir
-        Locator shareButton = page.locator("text=Compartir").first();
-        if (shareButton.isVisible()) {
+// ...compartir como ya tienes...
+    System.out.println("Reaccionó, comentó y compartió en: " + publicacionUrl);
+    page.waitForTimeout(2000); // Espera final antes de cerrar la página
+
+    // Compartir
+    Locator shareButton = page.locator("text=Compartir").first();
+    if (shareButton.isVisible()) {
             shareButton.click();
             page.waitForTimeout(1000);
             Locator shareNowButton = page.locator("text=Compartir ahora (Amigos)").first();
             if (shareNowButton.isVisible()) {
                 shareNowButton.click();
-                System.out.println("Reaccionó, comentó y compartió en: " + publicacionUrl);
+                System.out.println("✅ Publicación compartida.");
             } else {
-                System.out.println("No se encontró el botón 'Compartir ahora (Amigos)'.");
+                System.out.println("⚠️ No se encontró el botón 'Compartir ahora (Amigos)'.");
             }
         } else {
-            System.out.println("No se encontró el botón 'Compartir'.");
+            System.out.println("⚠️ No se encontró el botón 'Compartir'.");
         }
+
+        System.out.println("Reaccionó, comentó y compartió en: " + publicacionUrl);
 
         // No cerramos la página aquí, InteractionManager la cerrará
     }
 
-    private void reaccionarAPublicacion(Page page, String tipoReaccion) { // Recibe Page directamente
-        // Usar el selector de texto para el botón "Like"
-        Locator reaccionBtn = page.locator("text=Like");
-        reaccionBtn.waitFor(new Locator.WaitForOptions().setState(WaitForSelectorState.VISIBLE).setTimeout(30000)); // Aumentar timeout
+    private void reaccionarAPublicacion(Page page, String tipoReaccion) {
+    // Selector robusto para el botón "Me gusta"/"Like"
+    Locator reaccionBtn = page.locator("div[aria-label='Me gusta'], div[aria-label='Like']").first();
+    try {
+        reaccionBtn.waitFor(new Locator.WaitForOptions().setState(WaitForSelectorState.VISIBLE).setTimeout(30000));
         reaccionBtn.hover();
         page.waitForTimeout(1000);
 
         String selectorReaccion;
         switch (tipoReaccion.toLowerCase()) {
             case "me encanta":
-                selectorReaccion = "div[aria-label='Me encanta']";
+                selectorReaccion = "div[aria-label='Me encanta'], div[aria-label='Love']";
                 break;
             case "me divierte":
-                selectorReaccion = "div[aria-label='Me divierte']";
+                selectorReaccion = "div[aria-label='Me divierte'], div[aria-label='Haha']";
                 break;
             case "me asombra":
-                selectorReaccion = "div[aria-label='Me asombra']";
+                selectorReaccion = "div[aria-label='Me asombra'], div[aria-label='Wow']";
                 break;
             case "me entristece":
-                selectorReaccion = "div[aria-label='Me entristece']";
+                selectorReaccion = "div[aria-label='Me entristece'], div[aria-label='Sad']";
                 break;
             case "me enoja":
-                selectorReaccion = "div[aria-label='Me enoja']";
+                selectorReaccion = "div[aria-label='Me enoja'], div[aria-label='Angry']";
                 break;
             default:
-                selectorReaccion = "div[aria-label='Me gusta']";
+                selectorReaccion = "div[aria-label='Me gusta'], div[aria-label='Like']";
                 break;
         }
 
-        page.locator(selectorReaccion).click();
+        Locator reaccionFinal = page.locator(selectorReaccion).first();
+        reaccionFinal.waitFor(new Locator.WaitForOptions().setState(WaitForSelectorState.VISIBLE).setTimeout(10000));
+        reaccionFinal.click();
+        System.out.println("✅ Reacción '" + tipoReaccion + "' realizada.");
+    } catch (PlaywrightException e) {
+        System.out.println("⚠️ No se encontró el botón de reacción: " + e.getMessage());
     }
+}
 
     // Nuevo método para manejar el desafío anti-bot
     private void manejarAntiBotChallenge(Page page) {
-        System.out.println("⏳ Detectado control de seguridad anti-bot. Esperando hasta " + (ANTI_BOT_TIMEOUT_MS / 60000) + " minutos para que se complete manualmente.");
+        System.out.println("⏳ Detected anti-bot security control. Waiting up to " + (ANTI_BOT_TIMEOUT_MS / 60000) + " minutes for manual completion.");
         try {
-            // Esperar a que el texto del anti-bot desaparezca (indicando que el desafío se completó)
+            // Wait for the anti-bot text to disappear (indicating the challenge is complete)
             page.waitForSelector(ANTI_BOT_TEXT_SELECTOR, new Page.WaitForSelectorOptions().setState(WaitForSelectorState.HIDDEN).setTimeout(ANTI_BOT_TIMEOUT_MS));
-            System.out.println("✅ Control de seguridad anti-bot completado o página de desafío cerrada.");
+            System.out.println("✅ Anti-bot security control completed or challenge page closed.");
         } catch (PlaywrightException e) {
-            System.out.println("⚠️ El control de seguridad anti-bot no se completó en " + (ANTI_BOT_TIMEOUT_MS / 60000) + " minutos.");
+            System.out.println("⚠️ Anti-bot security control not completed in " + (ANTI_BOT_TIMEOUT_MS / 60000) + " minutes.");
         }
     }
 }

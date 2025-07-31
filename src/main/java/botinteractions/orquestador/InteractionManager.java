@@ -43,18 +43,19 @@ public class InteractionManager {
                 Page page = context.newPage(); // Crear una única página para esta cuenta
 
                 System.out.println("Intentando iniciar sesión para: " + cuenta.getEmail());
-                servicioFacebook.iniciarSesion(page, cuenta.getEmail(), cuenta.getContrasena());
 
                 // La lógica de navegación inicial y verificación de sesión se maneja completamente en FacebookInteractionService.
+                servicioFacebook.iniciarSesion(page, cuenta.getEmail(), cuenta.getContrasena());
+
+                  // La lógica de navegación inicial y verificación de sesión se maneja completamente en FacebookInteractionService.
                 servicioFacebook.iniciarSesionConCredenciales(page, cuenta.getEmail(), cuenta.getContrasena());
 
-                
 
                 // Aquí puedes llamar a más métodos como aceptarSolicitudes, reaccionarComentarCompartir, etc.
                 // Pasando la misma instancia de 'page'
                 servicioFacebook.aceptarSolicitudes(page);
                 // Asegúrate de reemplazar "URL_DE_PUBLICACION" con una URL de publicación real de Facebook
-                servicioFacebook.reaccionarComentarCompartir(page, "https://www.facebook.com/leonel.parrales.35", "jaja", "me gusta");
+                servicioFacebook.reaccionarComentarCompartir(page, "https://www.facebook.com/leonel.parrales.35", "se le agradece a CloverWorks", "me gusta");
 
                 page.close(); // Cerrar la página al finalizar las interacciones de la cuenta
                 context.close(); // Cerrar el contexto persistente para esta cuenta
